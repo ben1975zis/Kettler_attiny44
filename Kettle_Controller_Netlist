@@ -1,0 +1,261 @@
+УМНЫЙ ЧАЙНИК НА ATTINY44A - СПИСОК СОЕДИНЕНИЙ (ПЛАТА УПРАВЛЕНИЯ 5V)
+========================================================================
+НАЗНАЧЕНИЕ КОМПОНЕНТОВ:
+========================================================================
+МИКРОСХЕМЫ:
+-----------
+IC1         ATtiny44A-PU (DIP-14)
+ТРАНЗИСТОРЫ:
+------------
+Q1          2N7002 (N-MOSFET, SOT-23) - для реле K1
+Q2          MMBT2222A (NPN, SOT-23) - для буззера
+ДИОДЫ:
+------
+D1          1N4007 (защита реле от обратного тока)
+СВЕТОДИОДЫ:
+-----------
+LED1        LED 5мм (индикатор режима 1)
+LED2        LED 5мм (индикатор режима 2)
+LED3        LED 5мм (индикатор режима 3)
+LED4        LED 5мм (индикатор режима 4)
+LED_RGB     RGB LED общий анод (4-pin)
+КОНДЕНСАТОРЫ:
+-------------
+C1          100nF (развязка VCC ATtiny)
+C2          100nF (развязка AVCC ATtiny)
+C3          100nF (фильтр NTC)
+РЕЗИСТОРЫ:
+----------
+R1          47кОм 0.25W (делитель NTC)
+R2          220 Ом (RGB LED - красный)
+R3          220 Ом (RGB LED - зеленый)
+R4          220 Ом (RGB LED - синий)
+R5          470 Ом (мост 1-2, резистор R1)
+R6          470 Ом (мост 1-2, резистор R2)
+R7          470 Ом (мост 3-4, резистор R3)
+R8          470 Ом (мост 3-4, резистор R4)
+R9          4.7кОм (база Q2 - buzzer)
+R10         10кОм (затвор Q1 - relay)
+R11         100кОм (pull-down Q1)
+ПРОЧИЕ КОМПОНЕНТЫ:
+------------------
+K1          Реле 5V SPDT/DPDT (Omron G5V-2, Songle SRD-05VDC-SL-C)
+BZ1         Buzzer пассивный 5V
+SW1         Кнопка тактовая (KEY1)
+SW2         Кнопка тактовая (KEY2)
+NTC1        Термистор NTC 50кОм (B25/85: 3950K)
+J1          Разъем питания 2-pin (вход 5V DC)
+J2          Клеммник 2-pin (контакты реле к нагревателю 220V)
+J3          Разъем ISP 6-pin (программирование)
+СПИСОК СОЕДИНЕНИЙ (NETLIST):
+========================================================================
+ПИТАНИЕ 5V:
+-----------
+Net: VCC_5V
+  J1-1 (вход 5V)
+  C1-1
+  C2-1
+  IC1-1 (VCC)
+  R1-1 (делитель NTC)
+  LED_RGB-ANODE (общий анод RGB)
+  BZ1-PLUS
+  K1-COIL_PLUS (катушка реле +)
+  D1-CATHODE (защитный диод реле)
+  J3-2 (ISP VCC)
+Net: GND
+  J1-2 (вход GND)
+  C1-2
+  C2-2
+  C3-2
+  IC1-14 (GND)
+  Q1-EMITTER
+  NTC1-2
+  SW1-1
+  SW2-1
+  J2-2 (RELAY_OUT GND)
+  J3-6 (ISP GND)
+ATTINY44A СОЕДИНЕНИЯ:
+---------------------
+Net: MCU_VCC
+  IC1-1
+  C1-1
+Net: MCU_GND
+  IC1-14
+  C2-1 (AVCC filter to GND)
+Net: MCU_MISO
+  IC1-7 (PA6)
+  J3-1
+Net: MCU_MOSI
+  IC1-8 (PA5)
+  J3-4
+Net: MCU_SCK
+  IC1-5 (PB2)  ← ИСПРАВЛЕНО! SCK на PB2 (пин 5)
+  J3-3
+Net: MCU_RESET
+  IC1-13 (PA0, RESET для ISP)
+  J3-5
+RGB LED (ОБЩИЙ АНОД):
+---------------------
+Net: LED_R_CTRL
+  IC1-5 (PB2/OC0A)
+  R2-1
+Net: LED_G_CTRL
+  IC1-6 (PA7/OC0B)
+  R3-1
+Net: LED_B_CTRL
+  IC1-7 (PA6/OC1A)
+  R4-1
+Net: RGB_RED_CATHODE
+  R2-2
+  LED_RGB-RED
+Net: RGB_GREEN_CATHODE
+  R3-2
+  LED_RGB-GREEN
+Net: RGB_BLUE_CATHODE
+  R4-2
+  LED_RGB-BLUE
+Net: RGB_ANODE
+  LED_RGB-ANODE
+  VCC_5V
+BUZZER (ЧЕРЕЗ NPN ТРАНЗИСТОР):
+-------------------------------
+Net: BUZZER_CTRL
+  IC1-8 (PA5)
+  R9-1
+Net: BUZZER_BASE
+  R9-2
+  Q2-BASE
+Net: BUZZER_COLLECTOR
+  Q2-COLLECTOR
+  BZ1-MINUS
+Net: BUZZER_PLUS
+  BZ1-PLUS
+  VCC_5V
+Net: BUZZER_EMITTER
+  Q2-EMITTER
+  GND
+УПРАВЛЕНИЕ РЕЛЕ (ЧЕРЕЗ N-MOSFET):
+----------------------------------
+Net: RELAY_CTRL
+  IC1-9 (PA4)
+  R10-1
+Net: RELAY_GATE
+  R10-2
+  Q1-GATE
+  R11-1
+Net: RELAY_GATE_PULLDOWN
+  R11-2
+  GND
+Net: RELAY_DRAIN
+  Q1-DRAIN
+  K1-COIL_MINUS (катушка реле -)
+  D1-ANODE (защитный диод)
+Net: RELAY_SOURCE
+  Q1-SOURCE
+  GND
+Net: RELAY_PROTECTION
+  D1-CATHODE
+  VCC_5V
+Net: RELAY_CONTACTS_COM
+  K1-COM
+  J2-1 (к 220V фаза)
+Net: RELAY_CONTACTS_NO
+  K1-NO
+  J2-2 (к нагревателю)
+ТЕРМИСТОР NTC:
+--------------
+Net: NTC_VCC
+  R1-1
+  VCC_5V
+Net: NTC_SENSE
+  R1-2
+  IC1-12 (PA1/ADC1)
+  C3-1
+  NTC1-1
+Net: NTC_GND
+  NTC1-2
+  C3-2
+  GND
+МОСТОВАЯ СХЕМА LED + КНОПКИ:
+-----------------------------
+Мост 1-2 (PB3 pin 4) - для LED1, LED2 и KEY1:
+----------------------------------------------
+Net: BRIDGE_12_GND
+  GND
+  SW1-1 (один контакт KEY1)
+Net: BRIDGE_12_KEY_OUT
+  SW1-2 (второй контакт KEY1)
+  R5-1 (резистор R1 моста)
+Net: BRIDGE_12_MID
+  R5-2 (конец резистора R1)
+  R6-1 (начало резистора R2)
+  LED1-ANODE
+  LED2-ANODE
+Net: BRIDGE_12_MCU
+  R6-2 (конец резистора R2)
+  IC1-4 (PB3, A_1_2) ← ИСПРАВЛЕНО!
+Net: LED1_CATHODE_CTRL
+  LED1-CATHODE
+  IC1-10 (PA3, C_1_3)
+Net: LED2_CATHODE_CTRL
+  LED2-CATHODE
+  IC1-3 (PB1, C_2_4)
+Мост 3-4 (PA2 pin 11) - для LED3, LED4 и KEY2:
+-----------------------------------------------
+Net: BRIDGE_34_GND
+  GND
+  SW2-1 (один контакт KEY2)
+Net: BRIDGE_34_KEY_OUT
+  SW2-2 (второй контакт KEY2)
+  R7-1 (резистор R3 моста)
+Net: BRIDGE_34_MID
+  R7-2 (конец резистора R3)
+  R8-1 (начало резистора R4)
+  LED3-ANODE
+  LED4-ANODE
+Net: BRIDGE_34_MCU
+  R8-2 (конец резистора R4)
+  IC1-11 (PA2, A_3_4)
+Net: LED3_CATHODE_CTRL
+  LED3-CATHODE
+  IC1-10 (PA3, C_1_3) - shared с LED1
+Net: LED4_CATHODE_CTRL
+  LED4-CATHODE
+  IC1-3 (PB1, C_2_4) - shared с LED2
+ВАЖНО - СООТВЕТСТВИЕ СКЕТЧУ:
+-----------------------------
+В коде кнопки читаются так:
+  if(!(PINB & _BV(3))) nPress = 1;      // KEY1 на PB3 (pin 4)
+  else if(!(PINA & _BV(2))) nPress = 2; // KEY2 на PA2 (pin 11)
+Поэтому:
+  SW1 = KEY1 → подключен к мосту 1-2 → PB3 (pin 4)
+  SW2 = KEY2 → подключен к мосту 3-4 → PA2 (pin 11)
+НЕИСПОЛЬЗУЕМЫЕ ПИНЫ ATTINY44A:
+-------------------------------
+IC1-2 (PB0) - NC (не подключен)
+IC1-13 (PA0) - RESET (оставлен для ISP программирования)
+ДОСТУПНЫЕ ДЛЯ ИСПОЛЬЗОВАНИЯ:
+========================================================================
+РАЗЪЁМЫ И ИНТЕРФЕЙСЫ:
+========================================================================
+J1 (ПИТАНИЕ 5V):
+----------------
+Pin 1: VCC_5V (вход +5V от внешнего источника)
+Pin 2: GND (общий провод)
+J2 (КОНТАКТЫ РЕЛЕ - СИЛОВАЯ ЧАСТЬ 220V):
+-----------------------------------------
+Pin 1: RELAY_COM (общий контакт реле, подключается к 220V фаза)
+Pin 2: RELAY_NO (нормально разомкнутый, подключается к нагревателю)
+J3 (ISP ПРОГРАММИРОВАНИЕ):
+--------------------------
+Pin 1: MISO (PA6, pin 7)
+Pin 2: VCC (питание 5V)
+Pin 3: SCK (PB2, pin 5) ← ИСПРАВЛЕНО!
+Pin 4: MOSI (PA5, pin 8)
+Pin 5: RESET (PA0, pin 13)
+Pin 6: GND
+⚠️ ВНИМАНИЕ: При программировании через ISP временно отключите:
+- LED_R (PB2 используется как SCK)
+- BUZZER (PA5 используется как MOSI)
+- LED_B (PA6 используется как MISO)
+========================================================================
