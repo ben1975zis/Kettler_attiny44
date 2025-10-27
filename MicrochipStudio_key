@@ -1,0 +1,660 @@
+// Attiny 44A DIP-14 - Smart Kettle Controller
+// F_CPU: 8 MHz (internal RC oscillator)
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <avr/wdt.h>
+#include <avr/eeprom.h>
+#include <util/delay.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
+// =============================================================================
+// HARDWARE CONFIG
+// =============================================================================
+#define LED_R       PB2  // PWM OC0A → pin 4
+#define LED_G       PA7  // PWM OC0B → pin 6
+#define LED_B       PA6  // PWM OC1A → pin 7
+#define BUZZER      PA5  // → pin 8
+#define RELAY       PA4  // → pin 9
+#define TEMP_ADC    1    // ADC1 (PA1 → pin 12)
+
+// LED Matrix + Buttons (PA0 НЕ ИСПОЛЬЗУЕТСЯ!)
+#define A_1_2       PB3  // аноды 1-2 → pin 5 (KEY1) ← ПЕРЕНЕСЕНО С PA0!
+#define A_3_4       PA2  // аноды 3-4 → pin 11 (KEY2)
+#define C_1_3       PA3  // катоды 1,3 → pin 10
+#define C_2_4       PB1  // катоды 2,4 → pin 3
+
+// =============================================================================
+// TYPES
+// =============================================================================
+typedef enum {
+	NONE, BTN1_CLICK, BTN1_HOLD, BTN2_CLICK, BTN2_HOLD_SHORT, BTN2_HOLD_LONG
+} BtnEvent;
+
+typedef enum {
+	OFF, SELECTING, HEATING, BOILING, ALARMING, ERROR
+} State;
+
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+const int16_t TEMP_PRESETS[] = {4000, 6000, 7000, 8000, 9000};
+const uint8_t PRESET_COLORS[] = {86, 140, 172, 187, 227};
+
+// === ЭФФЕКТЫ ПОДСВЕТКИ ===
+const uint8_t arrTimeEff[] = {255, 128, 64, 32, 40, 20, 10, 5, 255, 128, 64, 32, 68, 34, 17, 9, 40, 20, 10, 5};
+
+#define TEMP_MAX         10300
+#define TEMP_MIN         715
+#define TEMP_BOIL        9500
+
+#define TIME_MAX_HEATING  2097152
+#define TIME_TEMP_STUCK   262144
+#define TIME_ALARM        30000
+#define TIME_DEBOUNCE     200
+#define TIME_HOLD_SHORT   3000
+#define TIME_HOLD_LONG    12000
+#define TIME_SELECT       12000
+#define TIME_EFFECT_MAX   1200000  // 20 минут
+
+// =============================================================================
+// GLOBAL STATE
+// =============================================================================
+volatile uint32_t system_millis = 0;
+State state = OFF;
+
+int16_t temp_now = 2000;
+int16_t temp_target = 0;
+int16_t temp_compensation = -150;
+
+uint8_t preset_idx = 0;
+
+uint32_t state_enter_time = 0;
+uint32_t temp_last_change = 0;
+
+bool alarm_active = false;
+uint32_t alarm_start = 0;
+
+// === ДЛЯ ЭФФЕКТОВ ===
+uint8_t ledsMode = 0;
+uint8_t effectMode = 0;
+uint32_t effectCount = 0;
+
+uint8_t ledsColor = 0;
+uint8_t ledsBright = 0;
+bool ledsDir = true;
+
+// === ДЛЯ НЕПОЛНОГО КИПЯЧЕНИЯ ===
+bool partial_boil = false;
+
+// =============================================================================
+// HARDWARE ABSTRACTION
+// =============================================================================
+
+void rgb(uint8_t r, uint8_t g, uint8_t b) {
+	OCR0A = 255 - r;
+	OCR0B = 255 - g;
+	OCR1A = 255 - b;
+}
+
+void hsv(uint8_t h, uint8_t v) {
+	uint8_t s = h / 43;
+	uint8_t f = (h - s * 43) * 6;
+	uint8_t q = (v * (255 - f)) >> 8;
+	uint8_t t = (v * f) >> 8;
+	
+	switch(s) {
+		case 0: rgb(v, t, 0); break;
+		case 1: rgb(q, v, 0); break;
+		case 2: rgb(0, v, t); break;
+		case 3: rgb(0, q, v); break;
+		case 4: rgb(t, 0, v); break;
+		default: rgb(v, 0, q);
+	}
+}
+
+void led_off(void) {
+	rgb(0, 0, 0);
+}
+
+uint8_t temp_to_color(int16_t t) {
+	if (t < 1829) return 7;
+	if (t > 9500) return 0;
+	return t / 31 - 51;
+}
+
+void show_led(uint8_t n) {
+	// Сброс: все пины в INPUT_PULLUP
+	DDRA &= ~(_BV(A_3_4) | _BV(C_1_3));
+	DDRB &= ~(_BV(A_1_2) | _BV(C_2_4));
+	PORTA |= _BV(A_3_4);
+	PORTB |= _BV(A_1_2);
+	
+	if (n == 0) return;
+	
+	if (n >= 1 && n <= 3) {
+		// Аноды 1-2: PB3 = HIGH
+		PORTB |= _BV(A_1_2);
+		DDRB |= _BV(A_1_2);
+		PORTA &= ~_BV(A_3_4);
+		DDRA |= _BV(A_3_4);
+		} else if (n == 4 || n == 5) {
+		// Аноды 3-4: PA2 = HIGH
+		PORTA |= _BV(A_3_4);
+		DDRA |= _BV(A_3_4);
+		PORTB &= ~_BV(A_1_2);
+		DDRB |= _BV(A_1_2);
+	}
+
+	switch(n) {
+		case 1: // LED1: C_1_3 = LOW
+		PORTA &= ~_BV(C_1_3);
+		DDRA |= _BV(C_1_3);
+		break;
+		case 2: // LED2: C_2_4 = LOW
+		case 3: // LED3: C_2_4 = LOW
+		PORTB &= ~_BV(C_2_4);
+		DDRB |= _BV(C_2_4);
+		break;
+		case 4: // LED4: C_1_3 = LOW
+		PORTA &= ~_BV(C_1_3);
+		DDRA |= _BV(C_1_3);
+		break;
+		case 5: // LED5: LED3 + LED4
+		PORTA &= ~_BV(C_1_3);
+		DDRA |= _BV(C_1_3);
+		PORTB &= ~_BV(C_2_4);
+		DDRB |= _BV(C_2_4);
+		break;
+	}
+}
+
+// --- Temperature Sensor WITH MEDIAN FILTER ---
+int16_t read_temp_raw(void) {
+	static int16_t hist[3];
+	static uint8_t idx = 0;
+	
+	ADMUX = (1 << REFS0) | TEMP_ADC;
+	ADCSRA = (1 << ADEN) | (1 << ADSC) | (1 << ADPS2) | (1 << ADPS1);
+	while (ADCSRA & (1 << ADSC));
+	hist[idx++] = ADC;
+	idx %= 3;
+	
+	int16_t a = hist[0], b = hist[1], c = hist[2];
+	int16_t mid = (a < b) ? ((b < c) ? b : ((c < a) ? a : c))
+	: ((a < c) ? a : ((c < b) ? b : c));
+	
+	return (mid > 558) ? (18291 - mid * 26) : (13820 - mid * 18);
+}
+
+void update_temp(void) {
+	int16_t raw = read_temp_raw();
+	temp_now += (raw - temp_now) / 32;
+	
+	static int16_t last_stable = 0;
+	if (abs(temp_now - last_stable) > 100) {
+		temp_last_change = system_millis;
+		last_stable = temp_now;
+	}
+}
+
+// --- Случайное число ---
+uint8_t rand255(void) {
+	uint8_t temp = 0;
+	for(uint8_t i = 0; i < 8; i += 2) {
+		temp |= ((read_temp_raw() ^ ledsColor) & 0b11) << i;
+	}
+	return temp;
+}
+
+// --- ЭФФЕКТЫ ---
+void effectInit(void) {
+	ledsColor = rand255();
+	ledsBright = 0;
+}
+
+void effectOff(void) {
+	if (effectMode > 0) {
+		eeprom_update_byte((uint8_t*)1, effectMode);
+	}
+	effectMode = 0;
+	led_off();
+}
+
+void showColorTemp(void) {
+	hsv(temp_to_color(temp_now), 255);
+}
+
+void showEffectMode(uint8_t mode) {
+	static uint32_t ledsCount = 0;
+	
+	if (mode > 0 && mode < 21) {
+		if (system_millis - ledsCount >= arrTimeEff[mode - 1]) {
+			ledsCount = system_millis;
+			
+			if (mode <= 4) {
+				ledsColor++;
+				hsv(ledsColor, 255);
+				} else {
+				if (ledsBright == 0) {
+					ledsDir = true;
+					if (mode <= 12)
+					ledsColor = 41 + rand255() % 184;
+					else if (mode > 16)
+					ledsColor = temp_to_color(temp_now);
+				}
+				
+				if (ledsDir) {
+					ledsBright++;
+					if (ledsBright == (mode <= 8 || mode > 16 ? 255 : (mode <= 12 ? 16 : 150)))
+					ledsDir = false;
+					} else {
+					ledsBright--;
+				}
+
+				if (mode <= 8 || mode > 16)
+				hsv(ledsColor, ledsBright);
+				else if (mode <= 12)
+				hsv(ledsColor, 255);
+				else
+				rgb(ledsBright, ledsBright, ledsBright);
+			}
+		}
+		} else {
+		showColorTemp();
+	}
+}
+
+BtnEvent read_button(void) {
+	static uint8_t last = 0;
+	static uint32_t press_time = 0;
+	static uint8_t hold_level = 0;
+	
+	show_led(0);
+	_delay_us(100);
+	
+	uint8_t btn = 0;
+	if (!(PINB & _BV(A_1_2))) btn = 1; // PB3 ← ИЗМЕНЕНО!
+	else if (!(PINA & _BV(A_3_4))) btn = 2;
+	
+	if (effectMode == 0) show_led(preset_idx + 1);
+	
+	BtnEvent evt = NONE;
+	
+	if (btn && btn == last) {
+		uint32_t held = system_millis - press_time;
+		
+		if (hold_level == 0 && held > TIME_DEBOUNCE) {
+			hold_level = 1;
+			press_time = system_millis;
+			
+			// Звук при нажатии
+			PORTA &= ~_BV(BUZZER);
+			_delay_ms(30);
+			PORTA |= _BV(BUZZER);
+		}
+		else if (hold_level == 1 && held > TIME_HOLD_SHORT) {
+			hold_level = 2;
+		}
+		else if (hold_level == 2 && held > TIME_HOLD_LONG - TIME_HOLD_SHORT) {
+			hold_level = 3;
+		}
+	}
+	else if (!btn && last) {
+		if (system_millis - press_time > TIME_DEBOUNCE) {
+			if (last == 1) {
+				evt = (hold_level < 2) ? BTN1_CLICK : BTN1_HOLD;
+				} else {
+				if (hold_level == 1) evt = BTN2_CLICK;
+				else if (hold_level == 2) evt = BTN2_HOLD_SHORT;
+				else if (hold_level == 3) evt = BTN2_HOLD_LONG;
+			}
+		}
+		hold_level = 0;
+		press_time = system_millis;
+	}
+	
+	last = btn;
+	return evt;
+}
+
+void update_led_effect(void) {
+	static uint32_t last_frame = 0;
+	if (system_millis - last_frame < 25) return;
+	last_frame = system_millis;
+	
+	if (ledsBright == 0) {
+		ledsDir = true;
+		ledsColor = temp_to_color(temp_now);
+	}
+	ledsBright += ledsDir ? 1 : -1;
+	if (ledsBright == 255) ledsDir = false;
+	
+	hsv(ledsColor, ledsBright);
+}
+
+// --- 30-SECOND ALARM ---
+void update_alarm(void) {
+	if (!alarm_active) return;
+	
+	uint32_t elapsed = system_millis - alarm_start;
+	if (elapsed > TIME_ALARM) {
+		alarm_active = false;
+		PORTA |= _BV(BUZZER);
+		return;
+	}
+	
+	if (elapsed < 10000) {
+		PORTA &= ~_BV(BUZZER);
+		} else if (elapsed < 20000) {
+		PORTA |= _BV(BUZZER);
+		} else if (elapsed < 30000) {
+		PORTA &= ~_BV(BUZZER);
+	}
+}
+
+// =============================================================================
+// STATE MACHINE
+// =============================================================================
+
+void enter_state(State s) {
+	state = s;
+	state_enter_time = system_millis;
+	
+	switch(s) {
+		case OFF:
+		PORTA &= ~_BV(RELAY);
+		DDRA |= _BV(RELAY);
+		led_off();
+		preset_idx = 0;
+		partial_boil = false;
+		break;
+		
+		case SELECTING:
+		preset_idx = eeprom_read_byte((uint8_t*)0);
+		if (preset_idx > 4) preset_idx = 0;
+		show_led(preset_idx + 1);
+		hsv(PRESET_COLORS[preset_idx], 255);
+		break;
+		
+		case HEATING:
+		case BOILING:
+		show_led(0);
+		led_off();
+		PORTA |= _BV(RELAY);
+		DDRA |= _BV(RELAY);
+		temp_last_change = system_millis;
+		temp_compensation = -150;
+		ledsColor = 0;
+		ledsBright = 0;
+		break;
+		
+		case ALARMING:
+		PORTA &= ~_BV(RELAY);
+		DDRA |= _BV(RELAY);
+		alarm_active = true;
+		alarm_start = system_millis;
+		PORTA &= ~_BV(BUZZER);
+		break;
+		
+		case ERROR:
+		PORTA &= ~_BV(RELAY);
+		DDRA |= _BV(RELAY);
+		alarm_active = false;
+		PORTA |= _BV(BUZZER);
+		break;
+	}
+}
+
+void handle_off(BtnEvent btn) {
+	if (btn == BTN1_CLICK) {
+		partial_boil = false;
+		enter_state(BOILING);
+	}
+	else if (btn == BTN2_CLICK) {
+		enter_state(SELECTING);
+	}
+	else if (btn == BTN2_HOLD_LONG) {
+		effectMode = 1;
+		effectCount = system_millis;
+		effectInit();
+	}
+}
+
+void handle_selecting(BtnEvent btn) {
+	if (btn == BTN1_CLICK) {
+		enter_state(OFF);
+	}
+	else if (btn == BTN2_CLICK) {
+		preset_idx = (preset_idx + 1) % 5;
+		show_led(preset_idx + 1);
+		hsv(PRESET_COLORS[preset_idx], 255);
+		state_enter_time = system_millis;
+	}
+	else if (btn == BTN2_HOLD_SHORT) {
+		eeprom_update_byte((uint8_t*)0, preset_idx);
+		show_led(0);
+		_delay_ms(250);
+		show_led(preset_idx + 1);
+	}
+	
+	if (system_millis - state_enter_time > TIME_SELECT) {
+		temp_target = TEMP_PRESETS[preset_idx];
+		if (temp_now < temp_target - 350) {
+			enter_state(HEATING);
+			} else {
+			enter_state(OFF);
+		}
+	}
+}
+
+void handle_heating_boiling(BtnEvent btn) {
+	if (state == HEATING) {
+		update_led_effect();
+	}
+	
+	if (btn == BTN1_HOLD) {
+		if (state == BOILING) {
+			partial_boil = !partial_boil;
+			hsv(partial_boil ? 235 : 0, 255);
+			_delay_ms(1000);
+			led_off();
+		}
+	}
+	else if (btn == BTN1_CLICK) {
+		enter_state(OFF);
+		return;
+	}
+	
+	if (system_millis - state_enter_time > TIME_MAX_HEATING) {
+		enter_state(ERROR);
+		return;
+	}
+	
+	if (system_millis - temp_last_change > TIME_TEMP_STUCK) {
+		enter_state(ERROR);
+		return;
+	}
+	
+	static int16_t last_calc = 0;
+	static uint32_t calc_time = 0;
+	
+	if (last_calc == 0) {
+		last_calc = temp_now;
+		calc_time = system_millis;
+	}
+	else if (temp_now > last_calc + 100) {
+		uint32_t dt = system_millis - calc_time;
+		if (dt > 1000) {
+			uint16_t rate = (temp_now - last_calc) * 10000UL / dt;
+			
+			if (rate > 5000) {
+				enter_state(ERROR);
+				return;
+			}
+			
+			if (rate >= 1300) temp_compensation = -1180;
+			else if (rate > 720) temp_compensation = 120 - rate;
+			else if (rate > 200) temp_compensation = 253796UL / rate - 933;
+			else temp_compensation = 350;
+			
+			last_calc = temp_now;
+			calc_time = system_millis;
+		}
+	}
+	
+	if (state == HEATING) {
+		if (temp_now >= temp_target + temp_compensation) {
+			enter_state(ALARMING);
+		}
+	}
+	else { // BOILING
+		static uint32_t boil_start = 0;
+		
+		if (temp_now > TEMP_BOIL && boil_start == 0) {
+			boil_start = system_millis;
+		}
+		
+		if (boil_start > 0) {
+			uint32_t boil_time = 16000;
+			uint32_t elapsed = system_millis - calc_time;
+			if (elapsed > 0 && elapsed < 10000) {
+				uint16_t rate = (temp_now - last_calc) * 10000UL / elapsed;
+				if (rate > 0) {
+					if (rate > 3000) rate = 3000;
+					else if (rate < 272) rate = 272;
+					boil_time = 19082305UL / rate + 5375;
+				}
+			}
+			
+			if (partial_boil) {
+				boil_time /= 4;
+			}
+			
+			if (system_millis - boil_start > boil_time) {
+				enter_state(ALARMING);
+			}
+		}
+	}
+}
+
+void handle_alarming(BtnEvent btn) {
+	if (btn != NONE) {
+		alarm_active = false;
+		PORTA |= _BV(BUZZER);
+		enter_state(OFF);
+	}
+}
+
+void handle_error(BtnEvent btn) {
+	hsv(0, 255);
+	_delay_ms(500);
+	led_off();
+	_delay_ms(500);
+	
+	if (btn != NONE) enter_state(OFF);
+}
+
+// =============================================================================
+// TIMER & MAIN
+// =============================================================================
+
+void timer0_init(void) {
+	TCCR0A = (1 << WGM01);
+	TCCR0B = (1 << CS01) | (1 << CS00);
+	OCR0A = 124;
+	TIMSK0 = (1 << OCIE0A);
+}
+
+ISR(TIM0_COMPA_vect) {
+	system_millis++;
+}
+
+int main(void) {
+	wdt_enable(WDTO_8S);
+	
+	// GPIO setup
+	DDRA = _BV(LED_G) | _BV(LED_B) | _BV(BUZZER) | _BV(RELAY);
+	DDRB = _BV(LED_R) | _BV(A_1_2); // PB3 как выход
+	PORTA = _BV(BUZZER) | _BV(A_3_4);
+	PORTB = _BV(A_1_2); // PB3 подтяжка не нужна (будет управляться динамически)
+	
+	// PWM
+	TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM01) | _BV(WGM00);
+	TCCR0B = _BV(CS01);
+	TCCR1A = _BV(WGM10) | _BV(COM1A1);
+	TCCR1B = _BV(WGM12) | _BV(CS11);
+	
+	// Init temp
+	for (int i = 0; i < 3; i++) { read_temp_raw(); _delay_ms(50); }
+	update_temp();
+	
+	// Загрузка сохранённого режима эффектов
+	ledsMode = eeprom_read_byte((uint8_t*)1);
+	if (ledsMode == 0 || ledsMode > 20) ledsMode = 1;
+	
+	// Индикация температуры при включении
+	uint8_t temp_indicator = (temp_now + 500) / 1000;
+	if (temp_indicator > 10) temp_indicator = 10;
+	
+	for (uint8_t i = 0; i < temp_indicator; i++) {
+		hsv(200, 255);
+		_delay_ms(200);
+		led_off();
+		_delay_ms(200);
+	}
+	_delay_ms(500);
+	
+	timer0_init();
+	sei();
+	
+	while (1) {
+		wdt_reset();
+		update_alarm();
+		update_temp();
+		
+		// === РЕЖИМ ПРОСМОТРА ЭФФЕКТОВ ===
+		if (effectMode) {
+			if (system_millis - effectCount > TIME_EFFECT_MAX) {
+				effectOff();
+				} else {
+				showEffectMode(effectMode);
+				
+				BtnEvent btn = read_button();
+				if (btn == BTN2_HOLD_SHORT) {
+					effectMode = effectMode % 20 + 1;
+					effectCount = system_millis;
+					effectInit();
+					} else if (btn != NONE) {
+					effectOff();
+				}
+				_delay_ms(5);
+				continue;
+			}
+		}
+		
+		if (temp_now >= TEMP_MAX) {
+			enter_state(ERROR);
+			continue;
+		}
+		
+		if (temp_now < TEMP_MIN) {
+			if (state != ERROR) enter_state(ERROR);
+			continue;
+		}
+		
+		BtnEvent btn = read_button();
+		
+		switch(state) {
+			case OFF:       handle_off(btn); break;
+			case SELECTING: handle_selecting(btn); break;
+			case HEATING:
+			case BOILING:   handle_heating_boiling(btn); break;
+			case ALARMING:  handle_alarming(btn); break;
+			case ERROR:     handle_error(btn); break;
+		}
+		
+		_delay_ms(5);
+	}
+}
