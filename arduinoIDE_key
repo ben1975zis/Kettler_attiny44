@@ -1,7 +1,6 @@
 /*
  * УМНЫЙ ЧАЙНИК для ATtiny44A
- * Разработчик: Андрей & Qwen.
- */
+  */
 
 #include <avr/wdt.h>
 #include <avr/eeprom.h>
@@ -43,7 +42,7 @@ enum State {
 // CONFIGURATION
 // =============================================================================
 const int16_t TEMP_PRESETS[] = {4000, 6000, 7000, 8000, 9000}; // 40-90°C
-const uint8_t PRESET_COLORS[] = {86, 140, 172, 187, 227};
+const uint8_t PRESET_COLORS[] = {160, 96, 64, 32, 16};
 
 #define TEMP_MAX         10300  // Overheat protection
 #define TEMP_MIN         715    // Sensor error detection
