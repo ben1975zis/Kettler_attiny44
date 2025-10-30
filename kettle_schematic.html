@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Схема умного чайника ATtiny44A</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1em;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .section h2 {
+            color: #2d3748;
+            border-left: 4px solid #667eea;
+            padding-left: 15px;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        .schematic-container {
+            background: #f7fafc;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+            border: 2px solid #e2e8f0;
+        }
+        .component-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .component-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .component-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .component-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        .pin-connection {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #edf2f7;
+            font-family: 'Courier New', monospace;
+        }
+        .pin-connection:last-child {
+            border-bottom: none;
+        }
+        .pin-label {
+            font-weight: bold;
+            color: #4a5568;
+            min-width: 80px;
+        }
+        .arrow {
+            color: #667eea;
+            margin: 0 10px;
+            font-weight: bold;
+        }
+        .connection-detail {
+            color: #2d3748;
+        }
+        .parts-list {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+        }
+        .parts-list table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .parts-list th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .parts-list td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .parts-list tr:hover {
+            background: #f7fafc;
+        }
+        .warning-box {
+            background: #fff5f5;
+            border-left: 4px solid #fc8181;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .warning-box h3 {
+            color: #c53030;
+            margin-bottom: 10px;
+        }
+        .info-box {
+            background: #ebf8ff;
+            border-left: 4px solid #4299e1;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .info-box h3 {
+            color: #2c5282;
+            margin-bottom: 10px;
+        }
+        .note {
+            background: #fefcbf;
+            border-left: 4px solid #ecc94b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 0.95em;
+        }
+        code {
+            background: #2d3748;
+            color: #68d391;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .schematic-ascii {
+            background: #2d3748;
+            color: #68d391;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.4;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        @media (max-width: 768px) {
+            .component-grid {
+                grid-template-columns: 1fr;
+            }
+            .header h1 {
+                font-size: 1.5em;
+            }
+            .content {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 Схема умного чайника на ATtiny44A</h1>
+            <p>Полная схема подключения с емкостным блоком питания 220V→5V</p>
+        </div>
+        <div class="content">
+            <!-- Блок питания -->
+            <div class="section">
+                <h2>⚡ Блок питания (емкостной делитель 220V → 5V)</h2>
+                <div class="warning-box">
+                    <h3>⚠️ ОПАСНО! Высокое напряжение 220V!</h3>
+                    <p>Работайте с сетевым напряжением ТОЛЬКО при наличии опыта! Изолируйте все открытые контакты. Используйте предохранитель!</p>
+                </div>
+                <div class="schematic-ascii">
+  220V AC ──[Предохр 0.5A]──┬──[R1 470кΩ 1W]──┬──[C1 0.47µF 400V X2]──┐
+                            │                 │                       │
+                            │                 └──[R2 1МΩ 0.5W]──GND   │
+                            │                                         │
+                            └─────────────────────────────────────────┤
+                                                                      │
+GND ─────────────────────────────────────────────────────────────[C1]─┘
+                                                                      │
+                          ┌───────────────────────────────────────────┤
+                          │                                           │
+                    [Диодный мост DB107]                              │
+                    AC1 ────────┐                                     │
+                    AC2 ────────┼─────────────────────────────────────┘
+                    +   ────────┼──[C2 470µF 16V]──┬──[7805/AMS1117]──┬──VCC +5V
+                    -   ────────┴──────────────────┴──────────────────┴──GND
+                                                   │                  │
+                                                   └──[C3 100nF]──────┤
+                                                   └──[C4 10µF]───────┘
+                </div>
+                <div class="info-box">
+                    <h3>🔋 Компоненты блока питания:</h3>
+                    <ul style="line-height: 1.8; margin-left: 20px;">
+                        <li><strong>Предохранитель:</strong> 0.5A керамический (защита)</li>
+                        <li><strong>C1:</strong> 0.47µF 400V X2 (гасящий конденсатор, класс X2!)</li>
+                        <li><strong>R1:</strong> 470кΩ 1W (разрядный резистор для C1)</li>
+                        <li><strong>R2:</strong> 1МΩ 0.5W (дополнительная разрядка)</li>
+                        <li><strong>Диодный мост:</strong> DB107 (1A, 1000V) или 4× 1N4007</li>
+                        <li><strong>C2:</strong> 470µF 16V (сглаживающий электролит)</li>
+                        <li><strong>Стабилизатор:</strong> 7805 или AMS1117-5.0 (+ радиатор для 7805)</li>
+                        <li><strong>C3:</strong> 100nF керамический (выход стабилизатора)</li>
+                        <li><strong>C4:</strong> 10µF танталовый (дополнительная фильтрация)</li>
+                    </ul>
+                </div>
+                <div class="note">
+                    💡 <strong>Расчет:</strong> При C1=0.47µF ток ≈ 30мА (достаточно для ATtiny44A + реле + LED). Для бóльшего тока используйте C1=1µF (≈65мА).
+                </div>
+            </div>
+            <!-- ATtiny44A пинаут -->
+            <div class="section">
+                <h2>🔌 Распиновка ATtiny44A (DIP-14)</h2>
+                <div class="schematic-ascii">
+                         ATtiny44A DIP-14
+                    ┌─────────────────────┐
+           VCC  ────┤ 1  VCC      GND  14 ├──── GND
+      A_1_2 ────────┤ 2  PB0      PA0  13 ├────── RESET / ISP
+      C_2_4 ────────┤ 3  PB1      PA1  12 ├────── NTC термистор
+      EXTRA_PIN ────┤ 4  PB3      PA2  11 ├────── A_3_4 (KEY1, LED3/4/5)
+     LED_R    ──────┤ 5  PB2      PA3  10 ├────── C_1_3 (LED1/3)
+     LED_G    ──────┤ 6  PA7      PA4   9 ├────── RELAY (2N7002)
+     LED_B    ──────┤ 7  PA6      PA5   8 ├────── BUZZER (SS8050/MMBT2222A)
+                    └─────────────────────┘
+    ⚠️  PB0 (pin2) = A_1_2 → KEY2 и LED1/2
+    ⚠️  PA2 (pin11) = A_3_4 → KEY1 и LED3/4/5
+    ⚠️  PB3 (pin4) = EXTRA_PIN (не используется, подтянуть к VCC)
+                </div>
+            </div>
+            <!-- Основные узлы -->
+            <div class="section">
+                <h2>🔧 Схема подключения основных узлов</h2>
+                <div class="component-grid">
+                    <!-- RGB LED -->
+                    <div class="component-card">
+                        <h3>💡 RGB LED (общий анод)</h3>
+                        <div class="pin-connection">
+                            <span class="pin-label">VCC +5V</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Общий анод RGB</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">PB2 (pin5)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[220Ω] → R (красный)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">PA7 (pin6)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[220Ω] → G (зеленый)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">PA6 (pin7)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[220Ω] → B (синий)</span>
+                        </div>
+                        <div class="note">PWM управление, инверсная логика</div>
+                    </div>
+                    <!-- Buzzer -->
+                    <div class="component-card">
+                        <h3>🔊 Buzzer (через NPN транзистор)</h3>
+                        <div class="pin-connection">
+                            <span class="pin-label">PA5 (pin8)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[4.7кΩ] → База SS8050/MMBT2222A</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Коллектор</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Buzzer (-)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Эмиттер</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">GND</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Buzzer (+)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">VCC +5V</span>
+                        </div>
+                        <div class="note" style="background: #e6fffa; border-left-color: #38b2ac;">
+                            <strong>⚠️ ПРЯМАЯ ЛОГИКА:</strong><br>
+                            HIGH на PA5 = buzzer ВКЛЮЧЕН<br>
+                            LOW на PA5 = buzzer ВЫКЛЮЧЕН
+                        </div>
+                    </div>
+                    <!-- Relay -->
+                    <div class="component-card">
+                        <h3>⚡ Реле 5V (через N-MOSFET)</h3>
+                        <div class="pin-connection">
+                            <span class="pin-label">PA4 (pin9)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[10кΩ] → Затвор 2N7002</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Затвор</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[100кΩ] → GND (pull-down)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Сток</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Катушка реле (-)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Исток</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">GND</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">VCC +5V</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Катушка реле (+)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">Диод 1N4007</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Катод к VCC, анод к стоку</span>
+                        </div>
+                        <div class="note">Защитный диод обязателен!</div>
+                    </div>
+                    <!-- NTC -->
+                    <div class="component-card">
+                        <h3>🌡️ Термистор NTC 50кΩ</h3>
+                        <div class="pin-connection">
+                            <span class="pin-label">VCC +5V</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[47кΩ] → PA1 (pin12)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">PA1 (pin12)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">NTC 50кΩ → GND</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">PA1</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">[100nF] → GND (фильтр)</span>
+                        </div>
+                        <div class="note">Делитель напряжения для АЦП</div>
+                    </div>
+                    <!-- Мостовая схема LED + кнопки -->
+                    <div class="component-card">
+                        <h3>🔘💡 Мостовая схема (LED1-5 + KEY1-2)</h3>
+                        <div class="note" style="margin-bottom: 15px; background: #e6fffa; border-left-color: #319795;">
+                            <strong>Цифровая матрица:</strong> Кнопки подключены к GND, мост управляется как цифровые входы/выходы
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">KEY1 (BTN1)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">GND + мост 3-4 → PA2 (pin 11)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">KEY2 (BTN2)</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">GND + мост 1-2 → PB0 (pin 2)</span>
+                        </div>
+                        <div style="margin: 15px 0; padding: 10px; background: #f0fff4; border-radius: 5px;">
+                            <strong>LED подключение (5 индикаторов):</strong>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">LED1</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Между R1-R2 (мост 1-2) и PA3 (C_1_3)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">LED2</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Между R1-R2 (мост 1-2) и PB1 (C_2_4)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">LED3</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Между R3-R4 (мост 3-4) и PA3 (C_1_3)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">LED4</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">Между R3-R4 (мост 3-4) и PB1 (C_2_4)</span>
+                        </div>
+                        <div class="pin-connection">
+                            <span class="pin-label">LED5</span>
+                            <span class="arrow">→</span>
+                            <span class="connection-detail">LED3+LED4 одновременно (оба катода)</span>
+                        </div>
+                        <div class="note" style="margin-top: 10px;">
+                            Резисторы R1-R4: <strong>470 Ом</strong> каждый<br>
+                            Чтение кнопок — <strong>цифровое</strong>, не через АЦП
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Температурные режимы -->
+            <div class="section">
+                <h2>🌡️ Температурные пресеты и цветовая индикация</h2>
+                <div class="component-grid">
+                    <div class="component-card">
+                        <h3>🔵 Режим 1: 40°C</h3>
+                        <div style="padding: 20px; background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%); border-radius: 10px; color: white; text-align: center; margin: 10px 0;">
+                            <strong>СИНИЙ</strong> (оттенок 180)
+                        </div>
+                        <p style="text-align: center; margin-top: 10px;">LED1 горит</p>
+                    </div>
+                    <div class="component-card">
+                        <h3>🟢 Режим 2: 50°C</h3>
+                        <div style="padding: 20px; background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 10px; color: white; text-align: center; margin: 10px 0;">
+                            <strong>ЗЕЛЕНЫЙ</strong> (оттенок 96)
+                        </div>
+                        <p style="text-align: center; margin-top: 10px;">LED2 горит</p>
+                    </div>
+                    <div class="component-card">
+                        <h3>🟡 Режим 3: 60°C</h3>
+                        <div style="padding: 20px; background: linear-gradient(135deg, #ecc94b 0%, #d69e2e 100%); border-radius: 10px; color: white; text-align: center; margin: 10px 0;">
+                            <strong>ЖЕЛТО-ЗЕЛЕНЫЙ</strong> (оттенок 64)
+                        </div>
+                        <p style="text-align: center; margin-top: 10px;">LED3 горит</p>
+                    </div>
+                    <div class="component-card">
+                        <h3>🟠 Режим 4: 80°C</h3>
+                        <div style="padding: 20px; background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%); border-radius: 10px; color: white; text-align: center; margin: 10px 0;">
+                            <strong>ЖЕЛТЫЙ</strong> (оттенок 32)
+                        </div>
+                        <p style="text-align: center; margin-top: 10px;">LED4 горит</p>
+                    </div>
+                    <div class="component-card">
+                        <h3>🔴 Режим 5: 90°C</h3>
+                        <div style="padding: 20px; background: linear-gradient(135deg, #fc8181 0%, #f56565 100%); border-radius: 10px; color: white; text-align: center; margin: 10px 0;">
+                            <strong>ОРАНЖЕВО-КРАСНЫЙ</strong> (оттенок 16)
+                        </div>
+                        <p style="text-align: center; margin-top: 10px;">LED3+LED4 одновременно</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Режимы работы -->
+            <div class="section">
+                <h2>🎮 Режимы работы устройства</h2>
+                <div class="component-grid">
+                    <div class="component-card">
+                        <h3>💡 Режимы подсветки (8 эффектов)</h3>
+                        <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li><strong>1-4:</strong> Плавная смена оттенков (hue sweep)</li>
+                            <li style="margin-left: 20px; color: #718096;">Скорости: 255, 128, 64, 32 мс</li>
+                            <li><strong>5-8:</strong> Температурная пульсация</li>
+                            <li style="margin-left: 20px; color: #718096;">Цвет по текущей температуре воды</li>
+                            <li style="margin-left: 20px; color: #718096;">Скорости: 255, 128, 64, 32 мс</li>
+                            <li><strong>Автоотключение:</strong> через 20 минут</li>
+                        </ul>
+                    </div>
+                    <div class="component-card">
+                        <h3>🔘 Управление кнопками</h3>
+                        <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li><strong>BTN1 (PA2):</strong> Короткое → BOILING</li>
+                            <li><strong>BTN1 (удержание >3с):</strong> Переключение partial_boil</li>
+                            <li><strong>BTN2 (PB0):</strong> Короткое → выбор пресета</li>
+                            <li><strong>BTN2 (удержание 3 сек):</strong> Сохранение пресета / переключение эффектов</li>
+                            <li><strong>BTN2 (удержание 12 сек):</strong> Активация эффектов</li>
+                        </ul>
+                    </div>
+                    <div class="component-card">
+                        <h3>🔊 Звуковые сигналы</h3>
+                        <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li><strong>Подтверждение:</strong> 30 мс писк при нажатии</li>
+                            <li><strong>Завершение (ALARMING):</strong> 30 сек</li>
+                            <li style="margin-left: 20px; color: #718096;">10с звук → 10с пауза → 10с звук</li>
+                            <li><strong>Авария (ERROR):</strong> Тревожный сигнал</li>
+                            <li style="margin-left: 20px; color: #718096;">250 мс вкл/выкл (синхронно с красным LED)</li>
+                        </ul>
+                    </div>
+                    <div class="component-card">
+                        <h3>🛡️ Защитные функции</h3>
+                        <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Отключение при T > 103°C (перегрев)</li>
+                            <li>Отключение при T < 7°C (обрыв датчика)</li>
+                            <li>Таймаут без изменения температуры: ~4.4 мин</li>
+                            <li>Максимальное время нагрева: ~35 мин</li>
+                            <li>Защита от сухого кипячения: скорость >50°C/сек</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <!-- Полная схема ASCII -->
+            <div class="section">
+                <h2>📐 Полная принципиальная схема</h2>
+                <div class="schematic-ascii">
+                   БЛОК ПИТАНИЯ                      ATtiny44A                    ПЕРИФЕРИЯ
+220V─┬─[Предохр]─┬─[R 470k]─┬─[C 0.47µF]─┐       ┌────────┐
+     │           │          │            │   VCC─┤1     14├─GND
+     │           └─[R 1M]─GND            │       │        │
+     └───────────────────────────────[DB107]     │        │
+                                        │        │        │          ┌──[220Ω]──LED_R
+                                      [470µF]    │  PB0  2├──────────┤
+                                        │        │        │          │
+                                    [7805/1117]  │  PB1  3├──────────┼──────────────┐
+                                        │        │        │          │              │
+                        VCC───┬────────┴──[100n]─┤  PB3  4│          │              │
+                              └───────────[10µ]─┬┤        │     ┌────┴────────┐     │
+                                                ││  PB2  5├─────┼──[220Ω]──LED_G    │
+                                              GND│        │     │             │     │
+                                                ││  PA7  6├─────┼──[220Ω]──LED_B    │
+                                                ││        │     │             │     │
+                                                ││  PA6  7├─────┘  VCC──RGB(+)│     │
+        ┌─────[4.7k]────PA5 (BUZZER)            ││        │                   │     │
+        │                                       ││  PA5  8├────[4.7k]───┐     │     │
+        │  ┌─────────────────────────────────────┤        │             │     │     │
+        │  │                                     │  PA4  9├─[10k]──┐    │     │     │
+        └──┴──Base                               │        │        │    │     │     │
+    SS8050/MMBT2222A  Collector──Buzzer(-)       │  PA3 10├────────┼────┼─────┼─────┼──┐
+           Emitter──GND                          │        │        │    │     │     │  │
+                         Buzzer(+)──VCC          │  PA2 11│        │    │     │     │  │
+                                                 │        │        │    │     │     │  │
+                                            NTC──┤  PA1 12│        │    │     │     │  │
+                                        ┌──[47k]─┤        │        │    │     │     │  │
+                                  VCC───┤        │  PA0 13├────────┼────┼─────┼─────┼──┐
+                                        └─[100n]─┤        │        │    │     │     │  │
+                                              GND└───────┬┘        │    │     │     │  │
+                                                         │        Gate  │     │     │  │
+                                                         GND    2N7002  │     │     │  │
+                                                               Drain────┤     │     │  │
+                                                               Source─GND     │     │  │
+                                                                        │     │     │  │
+                         VCC─┬─Relay(+)                         ┌───────┴     │     │  │
+                             │                                  │             │     │  │
+                             └─[1N4007]─Relay(-)─Drain          │             │     │  │
+                                (катод к VCC)                   │             │     │  │
+                                                                │             │     │  │
+                       VCC──────────────────────────────────────┘             │     │  │
+                                                                              │     │  │
+    МОСТОВАЯ СХЕМА LED + КНОПКИ:                                              │     │  │
+                                                                              │     │  │
+    Мост 1-2 (PB0 pin2 – KEY2):                                               │     │  │
+     GND──┤├KEY2──[R1 470Ω]──●──[R2 470Ω]──PB0────────────────────────────────┘     │  │
+                             │                                                      │  │
+                             ├──LED1(+)──LED1(-)──PA3───────────────────────────────┘  │
+                             │                                                         │
+                             └──LED2(+)──LED2(-)──PB1──────────────────────────────────┘
+                                                                                          
+   Мост 3-4 (PA2 pin11 – KEY1):                                                          
+   GND──┤├KEY1──[R3 470Ω]──●──[R4 470Ω]──PA2───────────────────────────────────────────┘
+                           │
+                           ├──LED3(+)──LED3(-)──PA3
+                           │
+                           └──LED4(+)──LED4(-)──PB1
+                           
+    LED5 = LED3 + LED4 одновременно (оба катода активны)
+    
+    ПРИНЦИП РАБОТЫ:
+    - В покое: PB0 и PA2 настроены как INPUT_PULLUP → HIGH
+    - При нажатии: пин замыкает на GND → LOW = нажатие
+    - Для LED: пин переключается в OUTPUT HIGH, а катоды управляются отдельно
+                </div>
+            </div>
+            <!-- Список деталей -->
+            <div class="section">
+                <h2>🛒 Полный список деталей</h2>
+                <div class="parts-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Поз.</th>
+                                <th>Наименование</th>
+                                <th>Кол-во</th>
+                                <th>Примечание</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>IC1</strong></td>
+                                <td>ATtiny44A-PU (DIP-14)</td>
+                                <td>1</td>
+                                <td>Микроконтроллер</td>
+                            </tr>
+                            <tr>
+                                <td><strong>IC2</strong></td>
+                                <td>7805 или AMS1117-5.0</td>
+                                <td>1</td>
+                                <td>Стабилизатор 5V (+ радиатор для 7805)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Q1</strong></td>
+                                <td>2N7002 (N-MOSFET SOT-23)</td>
+                                <td>1</td>
+                                <td>Для реле</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Q2</strong></td>
+                                <td>SS8050 или MMBT2222A (NPN SOT-23)</td>
+                                <td>1</td>
+                                <td>Для буззера (ПРЯМАЯ ЛОГИКА!)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>D1-D4</strong></td>
+                                <td>1N4007</td>
+                                <td>4</td>
+                                <td>Диодный мост (или DB107)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>D5</strong></td>
+                                <td>1N4007</td>
+                                <td>1</td>
+                                <td>Защита реле (обратный)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>LED1-4</strong></td>
+                                <td>LED 5мм любого цвета</td>
+                                <td>4</td>
+                                <td>Индикаторы режимов</td>
+                            </tr>
+                            <tr>
+                                <td><strong>LED5</strong></td>
+                                <td>RGB LED общий анод</td>
+                                <td>1</td>
+                                <td>Цветовая индикация температуры</td>
+                            </tr>
+                            <tr>
+                                <td><strong>C1</strong></td>
+                                <td>0.47µF 400V X2</td>
+                                <td>1</td>
+                                <td>Гасящий конденсатор (класс X2!)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>C2</strong></td>
+                                <td>470µF 16V электролит</td>
+                                <td>1</td>
+                                <td>Сглаживающий</td>
+                            </tr>
+                            <tr>
+                                <td><strong>C3,C5-7</strong></td>
+                                <td>100nF керамика</td>
+                                <td>4</td>
+                                <td>Развязка VCC, AVCC, фильтр NTC</td>
+                            </tr>
+                            <tr>
+                                <td><strong>C4</strong></td>
+                                <td>10µF 16V</td>
+                                <td>1</td>
+                                <td>Выход стабилизатора</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R1</strong></td>
+                                <td>470кОм 1W</td>
+                                <td>1</td>
+                                <td>Разрядный для C1</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R2</strong></td>
+                                <td>1МОм 0.5W</td>
+                                <td>1</td>
+                                <td>Дополнительная разрядка C1</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R3</strong></td>
+                                <td>47кОм</td>
+                                <td>1</td>
+                                <td>Делитель NTC</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R4-6</strong></td>
+                                <td>220 Ом</td>
+                                <td>3</td>
+                                <td>Для RGB LED (R,G,B)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R7-10</strong></td>
+                                <td>470 Ом</td>
+                                <td>4</td>
+                                <td>Мостовая схема LED+кнопки (R1-R4)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R11</strong></td>
+                                <td>4.7кОм</td>
+                                <td>1</td>
+                                <td>База SS8050/MMBT2222A (буззер)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R12</strong></td>
+                                <td>10кОм</td>
+                                <td>1</td>
+                                <td>Затвор 2N7002 (реле)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>R13</strong></td>
+                                <td>100кОм</td>
+                                <td>1</td>
+                                <td>Pull-down для MOSFET</td>
+                            </tr>
+                            <tr>
+                                <td><strong>NTC</strong></td>
+                                <td>Термистор 50кОм</td>
+                                <td>1</td>
+                                <td>Датчик температуры (B25/85: 3950K)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>K1</strong></td>
+                                <td>Реле 5V SPDT/DPDT</td>
+                                <td>1</td>
+                                <td>Коммутация нагревателя</td>
+                            </tr>
+                            <tr>
+                                <td><strong>BZ1</strong></td>
+                                <td>Buzzer пассивный 5V</td>
+                                <td>1</td>
+                                <td>Звуковые сигналы</td>
+                            </tr>
+                            <tr>
+                                <td><strong>SW1-2</strong></td>
+                                <td>Кнопки тактовые</td>
+                                <td>2</td>
+                                <td>Управление (KEY1, KEY2)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>F1</strong></td>
+                                <td>Предохранитель 0.5A</td>
+                                <td>1</td>
+                                <td>Керамический, 250V</td>
+                            </tr>
+                            <tr>
+                                <td><strong>—</strong></td>
+                                <td>Панелька DIP-14</td>
+                                <td>1</td>
+                                <td>Для ATtiny44A (опционально)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>—</strong></td>
+                                <td>Радиатор TO-220</td>
+                                <td>1</td>
+                                <td>Для 7805 (если используется)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Важные замечания -->
+            <div class="section">
+                <h2>⚙️ Важные технические замечания</h2>
+                <div class="warning-box">
+                    <h3>⚠️ Безопасность при работе с 220V</h3>
+                    <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                        <li>Используйте только <strong>конденсатор класса X2</strong> (275V~ или 400V~) для C1</li>
+                        <li>Обязательно устанавливайте <strong>разрядные резисторы</strong> R1 и R2</li>
+                        <li>Изолируйте все 220V дорожки на плате (зазор минимум 3мм)</li>
+                        <li>Используйте предохранитель F1 для защиты от КЗ</li>
+                        <li>Корпус должен быть изолирован от высокого напряжения</li>
+                        <li>Тестирование проводите через развязывающий трансформатор</li>
+                    </ul>
+                </div>
+                <div class="info-box">
+                    <h3>💡 Оптимизация энергопотребления</h3>
+                    <p><strong>Расчет тока от емкостного делителя:</strong></p>
+                    <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                        <li><code>I = U × 2π × f × C</code></li>
+                        <li>При C1=0.47µF, 220V, 50Hz: <strong>I ≈ 32мА</strong></li>
+                        <li>При C1=1.0µF: <strong>I ≈ 69мА</strong></li>
+                        <li><strong>Потребление устройства:</strong>
+                            <ul style="margin-top: 5px;">
+                                <li>ATtiny44A @ 8MHz: ~5мА</li>
+                                <li>RGB LED (максимум): ~30мА</li>
+                                <li>4× LED индикаторы: ~7мА</li>
+                                <li>Реле катушка: ~70мА (кратковременно)</li>
+                                <li>Buzzer: ~20мА (кратковременно)</li>
+                            </ul>
+                        </li>
+                        <li>Рекомендуется C1=<strong>0.47µF</strong> для режима ожидания</li>
+                        <li>Для работы реле используйте C1=<strong>1.0µF</strong></li>
+                    </ul>
+                </div>
+                <div class="info-box" style="background: #fff5f5; border-left-color: #fc8181;">
+                    <h3 style="color: #c53030;">⚠️ КРИТИЧНО: Логика Buzzer</h3>
+                    <p style="margin-top: 10px; font-size: 1.1em; line-height: 1.6;">
+                        <strong>NPN транзистор SS8050/MMBT2222A использует ПРЯМУЮ логику:</strong>
+                    </p>
+                    <ul style="line-height: 1.8; margin-left: 20px; margin-top: 10px; font-size: 1.05em;">
+                        <li><code style="background: #c53030; padding: 4px 8px;">HIGH на PA5</code> → транзистор открыт → <strong>buzzer ВКЛЮЧЕН</strong></li>
+                        <li><code style="background: #718096; padding: 4px 8px;">LOW на PA5</code> → транзистор закрыт → <strong>buzzer ВЫКЛЮЧЕН</strong></li>
+                    </ul>
+                    <p style="margin-top: 15px; padding: 10px; background: #fefcbf; border-radius: 5px;">
+                        💡 Это <strong>НЕ инверсная</strong> логика, как у RGB LED!
+                    </p>
+                </div>
+                <div class="note">
+                    <strong>🔧 Альтернатива:</strong> Вместо емкостного делителя можно использовать готовый импульсный блок питания 220V→5V (HLK-PM01, IRM-03-5), что безопаснее и проще в монтаже.
+                </div>
+                <div class="info-box">
+                    <h3>🔌 Настройка фьюзов ATtiny44A</h3>
+                    <p>Для корректной работы на внутреннем RC-генераторе 8MHz установите:</p>
+                    <div class="schematic-ascii" style="margin-top: 10px;">
+FUSE_LOW:  0xE2  (внутренний RC 8MHz, без делителя)
+FUSE_HIGH: 0xDD  (сохранить EEPROM, BOD 2.7V)
+FUSE_EXT:  0xFF  (без самопрограммирования)
+Команда для avrdude:
+avrdude -c usbasp -p t44 -U lfuse:w:0xE2:m -U hfuse:w:0xDD:m -U efuse:w:0xFF:m
+                    </div>
+                </div>
+            </div>
+            <!-- Монтаж и тестирование -->
+            <div class="section">
+                <h2>🔨 Порядок монтажа и тестирования</h2>
+                <div class="component-grid">
+                    <div class="component-card">
+                        <h3>1️⃣ Блок питания</h3>
+                        <ol style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Смонтируйте емкостной делитель</li>
+                            <li>Установите диодный мост DB107</li>
+                            <li>Добавьте сглаживающий C2 470µF</li>
+                            <li>Установите стабилизатор 7805/AMS1117</li>
+                            <li><strong>Тестируйте отдельно!</strong> Проверьте +5V на выходе</li>
+                        </ol>
+                    </div>
+                    <div class="component-card">
+                        <h3>2️⃣ Основная плата</h3>
+                        <ol style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Установите ATtiny44A (в панельку)</li>
+                            <li>Добавьте развязывающие конденсаторы</li>
+                            <li>Смонтируйте резисторы</li>
+                            <li>Установите транзисторы Q1, Q2</li>
+                            <li>Подключите периферию (LED, кнопки, NTC)</li>
+                        </ol>
+                    </div>
+                    <div class="component-card">
+                        <h3>3️⃣ Силовая часть</h3>
+                        <ol style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Установите реле с защитным диодом</li>
+                            <li>Проверьте подключение MOSFET 2N7002</li>
+                            <li>Убедитесь в правильности полярности диода</li>
+                            <li>Изолируйте высоковольтные контакты реле</li>
+                        </ol>
+                    </div>
+                    <div class="component-card">
+                        <h3>4️⃣ Программирование</h3>
+                        <ol style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Подключите ISP программатор (USBasp/Arduino ISP)</li>
+                            <li>Установите фьюзы (см. выше)</li>
+                            <li>Прошейте основной код</li>
+                            <li>Проверьте работу LED и буззера</li>
+                        </ol>
+                    </div>
+                    <div class="component-card">
+                        <h3>5️⃣ Калибровка NTC</h3>
+                        <ol style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Измерьте термистор при комнатной температуре</li>
+                            <li>Проверьте показания АЦП (должно быть 700-850)</li>
+                            <li>При необходимости подберите R3 (47кОм)</li>
+                            <li>Протестируйте в горячей воде</li>
+                        </ol>
+                    </div>
+                    <div class="component-card">
+                        <h3>6️⃣ Финальное тестирование</h3>
+                        <ol style="line-height: 1.8; margin-left: 20px; margin-top: 10px;">
+                            <li>Проверьте все режимы работы</li>
+                            <li>Убедитесь в срабатывании реле</li>
+                            <li>Проверьте защиту от перегрева</li>
+                            <li>Тестируйте таймауты безопасности</li>
+                            <li>Изолируйте плату в корпусе</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+            <!-- Схема ISP программирования -->
+            <div class="section">
+                <h2>🔌 Подключение ISP программатора</h2>
+                <div class="schematic-ascii">
+    USBasp/Arduino ISP          ATtiny44A
+    MISO ──────────────────────── PA6 (pin 7)
+    MOSI ──────────────────────── PA5 (pin 8)
+    SCK  ──────────────────────── PB2 (pin 5)
+    RESET ─────────────────────── PA0 (pin 13)
+    VCC  ──────────────────────── VCC (pin 1)
+    GND  ──────────────────────── GND (pin 14)
+    Примечание: При программировании возникают конфликты:
+    - PB2 (LED_R) используется как SCK
+    - PA5 (BUZZER) используется как MOSI
+    - PA6 (LED_B) используется как MISO
+    → Программируйте ДО установки этих компонентов!
+                </div>
+                <div class="note">
+                    <strong>⚠️ Важно:</strong> После первой прошивки фьюзов пин RESET (PA0) остаётся активным. Для повторного программирования ISP работает штатно.
+                </div>
+            </div>
+            <!-- Footer -->
+            <div class="section" style="text-align: center; padding: 20px; background: #f7fafc; border-radius: 10px;">
+                <p style="color: #4a5568; font-size: 0.9em;">
+                    📐 Разработано для ATtiny44A @ 8MHz | F_CPU = 8000000UL<br>
+                    ⚡ Емкостной блок питания 220V→5V | Мощность: ~150мВт<br>
+                    🔧 Поддержка ISP программирования через USBasp/Arduino<br>
+                    🌡️ 5 температурных пресетов: 40, 50, 60, 80, 90°C<br>
+                    💡 8 режимов RGB подсветки с автовыключением<br>
+                    🔊 3 типа звуковых сигналов (подтверждение, завершение, авария)<br>
+                    <strong style="color: #e53e3e; margin-top: 10px; display: block;">
+                        ⚠️ ВНИМАНИЕ: Работа с сетевым напряжением 220V опасна для жизни!<br>
+                        Соблюдайте технику безопасности при монтаже и тестировании!
+                    </strong>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
